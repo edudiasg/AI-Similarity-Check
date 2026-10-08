@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Semantic Similarity</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:40px 20px;background:#f1f5f9;color:#172033;font-family:system-ui,sans-serif}main{max-width:650px;margin:auto;padding:30px;background:white;border-radius:20px;box-shadow:0 12px 40px #17203312}h1{margin-top:0}p{color:#596579;line-height:1.5}label{display:block;margin-top:20px;font-weight:600}textarea{width:100%;min-height:95px;margin-top:8px;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font:inherit;resize:vertical}button{width:100%;margin-top:20px;padding:14px;border:0;border-radius:10px;background:#4f46e5;color:white;font:inherit;font-weight:600;cursor:pointer}button:disabled{opacity:.6;cursor:wait}#status{overflow-wrap:anywhere}output{display:block;text-align:center;font-size:48px;font-weight:700;color:#4f46e5}
+</style>
+</head>
+<body>
+<main>
+<h1>Semantic Similarity</h1>
+<p>Compare the meaning of two phrases. Try English phrases first.</p>
+<label for="phrase1">Phrase 1</label>
+<textarea id="phrase1">The cat is sleeping on the sofa.</textarea>
+<label for="phrase2">Phrase 2</label>
+<textarea id="phrase2">A cat is resting on the couch.</textarea>
+<button id="compare">Compare phrases</button>
+<p id="status" role="status" aria-live="polite">The first comparison downloads the model and may take a little while.</p>
+<output id="score" aria-live="polite"></output>
+<p>Cosine similarity: closer to 1 means more similar. This is a score, not a probability.</p>
+</main>
+<script type="module">
+const button = document.getElementById("compare");
+const status = document.getElementById("status");
+const score = document.getElementById("score");
+let extractor;
+button.addEventListener("click", async () => {
+  const first = document.getElementById("phrase1").value.trim();
+  const second = document.getElementById("phrase2").value.trim();
+  if (!first || !second) {
+    status.textContent = "Please enter both phrases.";
+    return;
+  }
+  button.disabled = true;
+  score.textContent = "";
+  try {
+    if (!extractor) {
+      status.textContent = "Loading library and downloading model…";
+      const { pipeline, env } = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1");
+      env.allowLocalModels = false;
+      env.backends.onnx.wasm.numThreads = 1;
+      extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", {device:"wasm", dtype:"q8"});
+    }
+    status.textContent = "Comparing…";
+    const embeddings = await extractor([first, second], {pooling:"mean", normalize:true});
+    const [a,b] = embeddings.tolist();
+    const similarity = a.reduce((sum,value,i) => sum + value*b[i], 0);
+    score.textContent = Math.max(-1, Math.min(1, similarity)).toFixed(3);
+    status.textContent = "Comparison complete.";
+  } catch (error) {
+    console.error(error);
+    status.textContent = "Error: " + (error.message || String(error));
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
